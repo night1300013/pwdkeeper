@@ -1,0 +1,5 @@
+# This is an example for having secret_key, iv, and salt
+cipher: 'aes-256-gcm'
+secret_key: 12345678ABCDEFGH12345678ABCDEFGH
+iv: 123456ABCDEF
+salt: 12345678ABCDEFGH

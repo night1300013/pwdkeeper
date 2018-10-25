@@ -12,6 +12,7 @@ Gem::Specification.new do |s|
   s.homepage	=
     'http://rubygems.org/gems/pwdkeeper'
   s.license	= 'MIT'
-  s.add_runtime_dependency 'sqlite3', '~> 1.3'
-  s.add_runtime_dependency 'activerecord', '~> 5.0'
+  s.add_runtime_dependency 'encryptor', '~> 3.0'
+  # s.add_runtime_dependency 'sqlite3', '~> 1.3'
+  # s.add_runtime_dependency 'activerecord', '~> 5.0'
 end
