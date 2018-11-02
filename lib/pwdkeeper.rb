@@ -1,133 +1,113 @@
-require 'json'
 require 'encryptor'
-require 'securerandom'
-require 'base64'
+require 'openssl'
 require 'yaml'
+require 'clipboard'
+require 'fileutils'
 
 class PwdKeeper
-  def initialize
-    config = YAML.load_file("./key.yml")
-    @cipher = OpenSSL::Cipher.new(config["cipher"])
-    @cipher.encrypt # Required before '#random_key' or '#random_iv' can be called. http://ruby-doc.org/stdlib-2.0.0/libdoc/openssl/rdoc/OpenSSL/Cipher.html#method-i-encrypt
-    @secret_key = config["secret_key"] # Insures that the key is the correct length respective to the algorithm used.
-    @iv = config["iv"] # Insures that the IV is the correct length respective to the algorithm used.
-    @salt = config["salt"]
+  def initialize(filename = nil)
+    @pwd_file = File.expand_path(filename || '~/.pwdkeeper')
+    access
+    read
   end
 
-  def main
-    puts "Password Keeper: Keep your password nice and safe"
-    puts "0 - Enter website's username and password"
-    puts "1 - View all websites' usernames and passwords"
-    puts "2 - Search for a wesite's username and password"
-    puts "3 - Exit"
-    print "Enter your selection: "
-
-    selection = gets.to_i
-
-    case selection
-      when 0
-        system "clear"
-        enter_info
-        main
-      when 1
-        system "clear"
-        search_all
-        main
-      when 2
-        system "clear"
-        search_one
-        main
-      when 3
-        puts "Bye!"
-        exit(0)
-      else
-        system "clear"
-        puts "I'm Sorry, that is not a valid input"
-        main
-    end
+  def add(key, username = nil)
+    @pwd_data[key] = {}
+    @pwd_data[key][:password] = ask_for_password("please enter a password")
+    @pwd_data[key][:username] = username
+    write
   end
 
-  def enter_info
-    puts "New Website Entry"
-    print "Website: "
-    website = gets.chomp
-    print "username: "
-    username = gets.chomp
-    print "password: "
-    password = gets.chomp
-    # print "key to decrypt: "
-    # key = gets.chomp
-
-    encrypted_password = Encryptor.encrypt(value: password, key: @secret_key, iv: @iv, salt: @salt)
-    encoded = Base64.encode64(encrypted_password).encode('utf-8')
-#    puts encoded
-#    decoded = Base64.decode64 encoded.encode('ascii-8bit')
-#    puts Encryptor.decrypt(value: decoded, key: @secret_key, iv: @iv, salt: @salt)
-    #encrypt the password and put it into the database
-    json = JSON.parse(File.read('info.json')) if File.file?('info.json')
-    hash = {
-      "website" => website,
-      "username" => username,
-      "password" => encoded
-    }
-    #An array to store all the hashed information
-    hashes = []
-    if File.file?('info.json')
-      json.each {|h| hashes << h}
-    end
-    #Append the new hash to the last
-    hashes << hash
-
-    File.open("info.json", "w") do |f|
-      f.write JSON.pretty_generate(hashes)
-    end
-    system "clear"
-    puts "New entry created"
-  end
-
-  def search_all
-    if File.file?('info.json')
-      puts "Show all website's username and password"
-      data = JSON.parse(File.read('info.json'))
-      #encoded = data[0]["password"]
-      #decoded = Base64.decode64 (encoded).encode('ascii-8bit')
-      i = 1
-      data.each do |hash|
-        puts "#{i}: {"
-        hash.each do |key, value|
-          puts "#{key}: #{value}"
-        end
-        puts "}"
-        i += 1
+  def get(key, seconds = 10)
+    if @pwd_data[key] && pwd_plaintext = @pwd_data[key][:password]
+      original_clipboard_content = Clipboard.paste
+      Clipboard.copy pwd_plaintext
+      puts "The password has been copied to your clipboard for #{seconds} seconds"
+      begin
+        sleep seconds.to_i
+      rescue Interrupt
+        Clipboard.copy original_clipboard_content
+        puts "Interrupt detected. Bye!"
+        exit
       end
+      Clipboard.copy original_clipboard_content
+      return true
     else
-      puts "No Entry"
+      puts "The requested password does not exist."
     end
   end
 
-  def search_one
-    if File.file?('info.json')
-      puts "Please enter the website's name:"
-      print "Website: "
-      website = gets.chomp
-      arr = JSON.parse(File.read('info.json'))
-      result =  arr.find {|h1| h1['website'] == website}
-      if result.nil?
-        puts "No Entry"
-      else
-        system "clear"
-        result.each do |key, value|
-          if key != "password"
-            puts "#{key}: #{value}"
-          else
-            decoded = Base64.decode64 (value).encode('ascii-8bit')
-            clear_text = Encryptor.decrypt(value: decoded, key: @secret_key, iv: @iv, salt: @salt)
-            puts "#{key}: #{clear_text}"
-          end
-        end
-      end
+  def show
+    puts "Website: Username \n"
+    if @pwd_data.empty?
+      puts "***Empty***"
     else
-      puts "No Entry"
+      @pwd_data.map{ |key, pwdentry|
+        puts "#{key}: #{pwdentry[:username]}"
+      }
     end
+  end
+
+  def change
+    create_password
+    write
+  end
+
+  private
+
+  def read
+    pwd_data_encrypted = File.read @pwd_file
+    begin
+      pwd_data_dump = Encryptor.decrypt(value: pwd_data_encrypted, key: @pwd[0..31], iv: @pwd[0..11])
+    rescue
+      puts "The password is not correct."
+      exit
+    end
+    @pwd_data = Marshal.load(pwd_data_dump) || {}
+  end
+
+  def write
+    pwd_data_dump = Marshal.dump @pwd_data || {}
+#    begin
+      pwd_data_encrypted = Encryptor.encrypt(value: pwd_data_dump, key: @pwd[0..31], iv: @pwd[0..11])
+    # rescue
+    #   puts "The password is not correct."
+    #   exit
+    # end
+    File.open(@pwd_file, 'w'){ |f| f.write pwd_data_encrypted }
+  end
+
+  def access
+    if !File.file? @pwd_file
+      puts "No password detected, creating one at #{@pwd_file}"
+      FileUtils.touch @pwd_file
+      create_password
+      write
+    else
+      @pwd = hash(ask_for_password 'Please enter the master password')
+    end
+  end
+
+  def create_password
+    begin
+      @pwd = hash(ask_for_password 'Please enter a new master password')
+      @pwd_again = hash(ask_for_password 'Please enter a new master password again')
+      if @pwd_again != @pwd
+        puts "The password does not match, please try again."
+      end
+    end until @pwd_again == @pwd
+  end
+
+  def ask_for_password(prompt = 'new password')
+    print "#{prompt}: ".capitalize
+    system 'stty -echo'
+    pwd_plaintext = ($stdin.gets||'').chop
+    system 'stty echo'
+    puts
+    pwd_plaintext
+  end
+
+  def hash(password)
+    OpenSSL::Digest::SHA512.new(password).digest
   end
 end

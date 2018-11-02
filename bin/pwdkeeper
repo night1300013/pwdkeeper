@@ -1,0 +1,24 @@
+#!/usr/bin/env ruby
+
+require_relative '../lib/pwdkeeper'
+
+@action = ARGV.shift
+
+@action = @action ? @action.to_sym : :show
+@args   = ARGV
+if @action == :help
+  puts "**pwdkeeper - The command line to keep your password safe**
+  add <website name> <description>: to add the website name, description, and password
+  get <website name> <seconds - optional>: to get the website's password and put into clipboard for couple seconds, default 10 seconds
+  show: to show all the available password of website and description
+  master: to change the master password
+  help: to get the available commands"
+elsif PwdKeeper.public_instance_methods(false).include?(@action)
+#  begin
+    PwdKeeper.new.send @action, *@args
+#  rescue StandardError => e
+#    puts e.message
+#  end
+else
+  puts "Unknown action: #{@action}\n Please see `pwdkeeper help` for available commands!"
+end
