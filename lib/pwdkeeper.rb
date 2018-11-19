@@ -58,7 +58,7 @@ class PwdKeeper
   def read
     pwd_data_encrypted = File.read @pwd_file
     begin
-      pwd_data_dump = Encryptor.decrypt(value: pwd_data_encrypted, key: @pwd[0..31], iv: @pwd[0..11])
+      pwd_data_dump = Encryptor.decrypt(value: pwd_data_encrypted.force_encoding(Encoding::ASCII_8BIT), key: @pwd[0..31], iv: @pwd[0..11])
     rescue
       puts "The password is not correct."
       exit
@@ -68,12 +68,12 @@ class PwdKeeper
 
   def write
     pwd_data_dump = Marshal.dump @pwd_data || {}
-#    begin
+    begin
       pwd_data_encrypted = Encryptor.encrypt(value: pwd_data_dump, key: @pwd[0..31], iv: @pwd[0..11])
-    # rescue
-    #   puts "The password is not correct."
-    #   exit
-    # end
+    rescue
+      puts "The password is not correct."
+      exit
+    end
     File.open(@pwd_file, 'w'){ |f| f.write pwd_data_encrypted }
   end
 

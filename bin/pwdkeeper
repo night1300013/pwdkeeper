@@ -8,10 +8,10 @@ require_relative '../lib/pwdkeeper'
 @args   = ARGV
 if @action == :help
   puts "**pwdkeeper - The command line to keep your password safe**
-  add <website name> <description>: to add the website name, description, and password
+  add <website name> <username>: to add the website name, username, and password after master password
   get <website name> <seconds - optional>: to get the website's password and put into clipboard for couple seconds, default 10 seconds
   show: to show all the available password of website and description
-  master: to change the master password
+  change: to change the master password
   help: to get the available commands"
 elsif PwdKeeper.public_instance_methods(false).include?(@action)
 #  begin
